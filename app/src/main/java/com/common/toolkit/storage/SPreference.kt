@@ -2,6 +2,8 @@ package com.common.toolkit.storage
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKeys
 import java.lang.IllegalArgumentException
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
@@ -23,7 +25,13 @@ class SPreference<T>(private val name: String, private val default: T) :
         lateinit var preference: SharedPreferences
 
         fun setContext(context: Context) {
-            preference = context.getSharedPreferences(context.packageName, Context.MODE_PRIVATE)
+//            preference = context.getSharedPreferences(context.packageName, Context.MODE_PRIVATE)
+            val mainKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+            preference = EncryptedSharedPreferences.create(
+                context.packageName, mainKeyAlias, context,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
         }
 
         //删除全部数据
