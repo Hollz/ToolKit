@@ -2,9 +2,9 @@ package com.common.toolkit.storage
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Base64
 import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
-import java.lang.IllegalArgumentException
+import java.io.*
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
@@ -12,11 +12,6 @@ import kotlin.reflect.KProperty
  * Preference 存储 通过键值对保持数据
  * 访问权限: 当前应用 (不公开 sharedPreference)
  * Kotlin 委托模式
- *
- * 支持类型 Int Long Float String Boolean
- *
- * 待支持-存储对象
- * 待支持-加密存储
  */
 class SPreference<T>(private val name: String, private val default: T) :
     ReadWriteProperty<Any?, T> {
@@ -25,10 +20,13 @@ class SPreference<T>(private val name: String, private val default: T) :
         lateinit var preference: SharedPreferences
 
         fun setContext(context: Context) {
-//            preference = context.getSharedPreferences(context.packageName, Context.MODE_PRIVATE)
-            val mainKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+            preference = context.getSharedPreferences(context.packageName, Context.MODE_PRIVATE)
+        }
+
+        //加密 最低支持 api 23
+        fun setContext(context: Context, mainKeyAlias: String) {
             preference = EncryptedSharedPreferences.create(
-                context.packageName, mainKeyAlias, context,
+                "${context.packageName}_encrypted", mainKeyAlias, context,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
@@ -39,6 +37,33 @@ class SPreference<T>(private val name: String, private val default: T) :
 
         //根据key删除存储数据
         fun clearPreference(key: String) = preference.edit().remove(key).apply()
+
+        //序列化对象
+        @Throws(IOException::class)
+        fun serialize(name: String, obj: Any) {
+            val byteArrayOutputStream = ByteArrayOutputStream()
+            val objectOutputStream = ObjectOutputStream(
+                byteArrayOutputStream
+            )
+            objectOutputStream.writeObject(obj)
+            val serStr = String(Base64.encode(byteArrayOutputStream.toByteArray(), Base64.DEFAULT))
+            objectOutputStream.close()
+            byteArrayOutputStream.close()
+            preference.edit().putString(name, serStr).apply()
+        }
+
+        //反序列化对象
+        @Throws(IOException::class)
+        fun deserialization(name: String): Any {
+            val serStr = preference.getString(name, "")
+            val objBytes = Base64.decode(serStr!!.toByteArray(), Base64.DEFAULT)
+            val byteArrayInputStream = ByteArrayInputStream(objBytes)
+            val objectInputStream = ObjectInputStream(byteArrayInputStream)
+            val obj = objectInputStream.readObject()
+            objectInputStream.close()
+            byteArrayInputStream.close()
+            return obj
+        }
     }
 
     override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
@@ -71,4 +96,5 @@ class SPreference<T>(private val name: String, private val default: T) :
         }
         return res as T
     }
+
 }
